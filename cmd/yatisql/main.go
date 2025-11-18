@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/yourusername/yatisql/internal/executor"
 	"github.com/yourusername/yatisql/internal/query"
@@ -20,6 +22,10 @@ func main() {
 	}
 
 	sql := args[0]
+
+	// Preprocess SQL to convert file paths to table names
+	// E.g., "SELECT * FROM tests/fixtures/sample.csv" -> "SELECT * FROM sample.csv"
+	sql = preprocessSQL(sql)
 
 	// Parse the query
 	parser := query.NewParser()
@@ -50,4 +56,41 @@ func main() {
 	}
 
 	fmt.Print(csv)
+}
+
+// preprocessSQL converts file paths in FROM clauses to just the filename
+// E.g., "SELECT * FROM tests/fixtures/sample.csv" -> "SELECT * FROM sample.csv"
+func preprocessSQL(sql string) string {
+	// Simple regex-free approach: look for FROM and extract filename
+	upper := strings.ToUpper(sql)
+	fromIdx := strings.Index(upper, "FROM")
+	if fromIdx == -1 {
+		return sql
+	}
+
+	// Find the table name after FROM
+	afterFrom := sql[fromIdx+4:]
+
+	// Skip whitespace
+	afterFrom = strings.TrimLeft(afterFrom, " \t")
+
+	// Find the end of the table name (space, WHERE, semicolon, end of string)
+	endIdx := len(afterFrom)
+	for i, ch := range afterFrom {
+		if ch == ' ' || ch == ';' {
+			endIdx = i
+			break
+		}
+	}
+
+	tablePath := strings.TrimSpace(afterFrom[:endIdx])
+	if tablePath == "" {
+		return sql
+	}
+
+	// Extract just the filename from the path
+	filename := filepath.Base(tablePath)
+
+	// Replace the path with just the filename
+	return sql[:fromIdx+4] + " " + filename + afterFrom[endIdx:]
 }

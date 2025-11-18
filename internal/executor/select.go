@@ -2,8 +2,10 @@ package executor
 
 import (
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/yourusername/yatisql/internal/csv"
@@ -103,11 +105,51 @@ func executeSelect(q interface{}) (Result, error) {
 }
 
 // readCSVFile reads a CSV file and returns all rows
-// For now, this is a placeholder - in real implementation would open file
 func readCSVFile(filename string) ([][]string, error) {
-	// This would normally read from disk
-	// For contract tests, data is passed directly
-	return [][]string{}, nil
+	// Try to open the file as-is first, then try common paths
+	paths := []string{
+		filename,
+		"tests/fixtures/" + filename,
+		"./tests/fixtures/" + filename,
+	}
+
+	var file *os.File
+	var err error
+
+	for _, path := range paths {
+		file, err = os.Open(path)
+		if err == nil {
+			// Found the file
+			filename = path
+			break
+		}
+	}
+
+	if file == nil {
+		return nil, fmt.Errorf("file not found: %s", filename)
+	}
+	defer file.Close()
+
+	// Detect delimiter from file extension
+	delimiter := ','
+	if strings.HasSuffix(strings.ToLower(filename), ".tsv") ||
+	   strings.HasSuffix(strings.ToLower(filename), ".tsv.gz") {
+		delimiter = '\t'
+	}
+
+	// Check if file is gzipped
+	var reader io.Reader = file
+	if strings.HasSuffix(strings.ToLower(filename), ".gz") {
+		gzReader, err := gzip.NewReader(file)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+		}
+		defer gzReader.Close()
+		reader = gzReader
+	}
+
+	// Parse CSV data
+	return parseCSVData(reader, rune(delimiter))
 }
 
 // getSelectedColumnIndices returns indices of selected columns
