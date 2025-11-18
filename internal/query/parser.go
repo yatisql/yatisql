@@ -7,6 +7,24 @@ import (
 	"github.com/xwb1989/sqlparser"
 )
 
+// QueryParser is the interface for parsing SQL queries
+type QueryParser interface {
+	Parse(sql string) (Query, error)
+}
+
+// sqlQueryParser is the concrete implementation
+type sqlQueryParser struct{}
+
+// NewParser creates a new SQL query parser
+func NewParser() QueryParser {
+	return &sqlQueryParser{}
+}
+
+// Parse parses a SQL query string and returns a Query object
+func (p *sqlQueryParser) Parse(sql string) (Query, error) {
+	return ParseSQL(sql)
+}
+
 // ParseSQL parses a SQL query string and returns a Query object
 // Supports:
 // - SELECT with column projection, WHERE filtering, JOIN operations, aliases
