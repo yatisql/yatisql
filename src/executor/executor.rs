@@ -1,4 +1,4 @@
-use sqlparser::ast::{Expr, ObjectName, ObjectNamePart, SelectItem, SetExpr, Statement, TableFactor, TableWithJoins};
+use sqlparser::ast::{Expr, ObjectNamePart, SelectItem, SetExpr, Statement, TableFactor};
 use crate::executor::row::Header;
 use crate::executor::selector::{FileReaderSelector, Selector, TabularFileReader};
 
@@ -138,9 +138,9 @@ fn execute_select(select: &sqlparser::ast::Select) -> anyhow::Result<()> {
     let table_name = table_name.unwrap();
     log::info!("Table to query: {}", table_name);
 
-    let reader = TabularFileReader::new_csv(table_name)?;
+    let mut reader = TabularFileReader::new_csv(table_name)?;
     let selector = FileReaderSelector::new(
-        reader
+        &mut reader
     )?;
 
     let old_header = selector.header();

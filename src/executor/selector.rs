@@ -6,45 +6,44 @@ pub trait Selector: Iterator<Item = Row> {
     fn header(&self) -> Header;
 }
 
-pub struct FileReaderSelector {
-    records: Vec<Row>,
+pub struct FileReaderSelector<'a> {
     header: Header,
-    current_pos: usize,
+    records: Box<dyn Iterator<Item = anyhow::Result<Row>> + 'a>,
 }
 
-impl FileReaderSelector {
-    pub fn new(mut reader: TabularFileReader) -> anyhow::Result<Self> {
+impl<'a> FileReaderSelector<'a> {
+    pub fn new(reader: &'a mut TabularFileReader) -> anyhow::Result<Self> {
         let header = Header::from_string_record(reader.headers());
-        let records = reader.records()
-            .map(|r| r.map(|record| Row::from_string_record(&record)))
-            .collect::<anyhow::Result<Vec<Row>>>()?;
-        Ok(Self {
-            records,
-            header,
-            current_pos: 0,
-        })
+        let records = Box::new(
+            reader.records().map(
+                |r| r.map(
+                    |record| Row::from_string_record(&record)
+                )
+            )
+        );
+        Ok(Self { header, records })
     }
 }
 
-impl Iterator for FileReaderSelector {
+impl<'a> Iterator for FileReaderSelector<'a> {
     type Item = Row;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_pos >= self.records.len() {
-            return None;
+        while let Some(result) = self.records.next() {
+            match result {
+                Ok(row) => return Some(row),
+                Err(_) => continue, // skip errors
+            }
         }
-        let record = self.records[self.current_pos].clone();
-        self.current_pos += 1;
-        Some(record)
+        None
     }
 }
 
-impl Selector for FileReaderSelector {
+impl<'a> Selector for FileReaderSelector<'a> {
     fn header(&self) -> Header {
         self.header.clone()
     }
 }
-
 
 pub struct TabularFileReader {
     reader: Reader<std::fs::File>,
