@@ -3,6 +3,7 @@ mod parser;
 mod sql_dialect;
 mod executor;
 mod io;
+mod utils;
 
 use cli::build_cli;
 use env_logger;
