@@ -9,7 +9,7 @@ OUTPUT=${3:-large_data.csv.gz}
 echo "Generating $ROWS rows with $COLS columns -> $OUTPUT"
 
 go run scripts/generate_large_csv.go \
-  -rows "$ROWS" \
-  -cols "$COLS" \
-  -output "$OUTPUT"
+-rows "$ROWS" \
+-cols "$COLS" \
+-output "$OUTPUT"
 
