@@ -1,0 +1,12 @@
+[package]
+name = "yatisql"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sqlparser = "0.59.0"
+log = "0.4.26"
+env_logger = "0.11.7"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+tempfile = "3.23.0"
