@@ -51,8 +51,19 @@ impl FileReader {
                 return Ok(result);
             }
         }
-        self.load_buffer(buffer)?;
-        Ok(self.next_line(buffer)?)
+        match self.load_buffer(buffer) {
+            Err(IoError::EndOfFile) => {
+                if self.buf_start < self.buf_end {
+                    let result = self.buf_start..self.buf_end;
+                    self.buf_start = self.buf_end;
+                    Ok(result)
+                } else {
+                    Err(IoError::EndOfFile)
+                }
+            }
+            Err(e) => Err(e),
+            Ok(()) => Ok(self.next_line(buffer)?)
+        }
     }
 
     pub fn rewind(&mut self) -> Result<(), IoError> {
