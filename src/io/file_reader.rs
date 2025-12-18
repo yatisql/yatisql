@@ -1,156 +1,114 @@
-// use std::cmp::min;
-// use std::fs::File;
-// use std::os::unix::fs::FileExt;
-// use crate::io::error::IoError;
-//
-// const BUFFER_SIZE: usize = 1024 * 1024; // 1 MB
-//
-// pub struct TabularFileReader {
-//     path: String,
-//     file: File,
-//     file_offset: u64,
-//     buffer: [u8; BUFFER_SIZE],
-//     buffer_pointer: usize,
-//     eof_pointer: usize,
-//     eol_flag: bool,
-//     delimiter: u8,
-// }
-//
-// pub struct RowIter<'a> {
-//     reader: &'a mut TabularFileReader,
-// }
-//
-// pub struct CellIter<'a> {
-//     reader: &'a mut TabularFileReader,
-// }
-//
-// impl<'a> Iterator for CellIter<'a> {
-//     type Item = &'a str;
-//
-//     fn next(&mut self) -> Option<Self::Item> {
-//         if self.pos >= self.row.len() {
-//             return None;
-//         }
-//         let bytes = self.row.as_bytes();
-//         let start = self.pos;
-//         while self.pos < self.row.len() && bytes[self.pos] != self.delimiter {
-//             self.pos += 1;
-//         }
-//         let end = self.pos;
-//         self.pos += 1; // skip delimiter
-//         Some(&self.row[start..end])
-//     }
-// }
-//
-// impl<'a> Iterator for RowIter<'a> {
-//     type Item = Result<&'a CellIter<'a>, IoError>;
-//
-//     fn next(&mut self) -> Option<Self::Item> {
-//         if !self.reader.is_eof() {
-//             None
-//         } else {
-//             match self.reader.next_col() {
-//                 Ok(row) => Some(Ok(&CellIter {
-//                     reader: self.reader
-//                 })),
-//                 Err(e) => Some(Err(e)),
-//             }
-//         }
-//     }
-// }
-//
-// impl TabularFileReader {
-//     fn derive_delimiter(path: &str ) -> u8 {
-//         // Simple heuristic based on file extension
-//         // TODO: more sophisticated methods may be needed
-//         if path.ends_with(".tsv") || path.ends_with(".tab") {
-//             b'\t'
-//         } else if path.ends_with(".csv") {
-//             b','
-//         } else if path.ends_with(".psv") {
-//             b'|'
-//         } else if path.ends_with(".scsv") {
-//             b';'
-//         } else if path.ends_with(".ssv") {
-//             b' '
-//         } else {
-//             b'\t'
-//         }
-//     }
-//
-//     pub fn new(path: String) -> anyhow::Result<Self> {
-//         let delimiter = Self::derive_delimiter(path.as_str());
-//         let file = File::open(&path)?;
-//         Ok(TabularFileReader {
-//             path,
-//             file,
-//             file_offset: 0,
-//             buffer: [0; BUFFER_SIZE],
-//             buffer_pointer: 0,
-//             eof_pointer: BUFFER_SIZE,
-//             eol_flag: false,
-//             delimiter,
-//         })
-//     }
-//
-//     fn load_buffer(&mut self, current_pointer: usize) -> Result<(), IoError> {
-//         if self.eof_pointer < BUFFER_SIZE {
-//             // ┬──┬ ノ(ò_óノ)
-//             return Err(IoError::EndOfFile { path: self.path.as_str() });
-//         }
-//
-//         let available_buffer = &mut self.buffer[current_pointer..];
-//
-//         if available_buffer.is_empty() {
-//             // ༼ つ ◕_◕ ༽つ
-//             // Buffer is full, cannot read more data
-//             return Err(IoError::LineTooLong { path: self.path.as_str() });
-//         }
-//
-//         let bytes_read = self.file.read_at(available_buffer, self.file_offset)?;
-//         self.file_offset += bytes_read as u64;
-//         self.eof_pointer = self.buffer_pointer + bytes_read;
-//         Ok(())
-//     }
-//
-//     fn move_unread_data_to_front(&mut self, current_pointer: &mut usize) {
-//         *current_pointer -= self.buffer_pointer;
-//         self.buffer.copy_within(self.buffer_pointer.., 0);
-//         self.buffer_pointer = 0;
-//     }
-//
-//     fn next_col(&mut self) -> Result<&[u8], IoError> {
-//         let mut found: Option<&[u8]> = None;
-//         for mut i in self.buffer_pointer..min(self.buffer.len(), self.eof_pointer) {
-//             // TODO: handle values enclosed in quotes
-//             if i >= self.buffer.len() - 2 && self.eof_pointer == self.buffer.len() {
-//                 self.move_unread_data_to_front(&mut i);
-//                 self.load_buffer(i)?;
-//             }
-//             if self.buffer[i] == self.delimiter || self.buffer[i] == b'\n' || self.buffer[i] == b'\r' {
-//                 self.eol_flag = self.buffer[i] == b'\n' || self.buffer[i] == b'\r';
-//                 let slice = &self.buffer[self.buffer_pointer..i];
-//                 self.buffer_pointer = i + 1;
-//                 if self.buffer[i] == b'\r' && i + 1 < self.buffer.len() - 1 && self.buffer[i + 1] == b'\n' {
-//                     self.buffer_pointer += 1;
-//                 }
-//                 return Ok(slice)
-//             }
-//         }
-//         self.eol_flag = true;
-//         Ok(&self.buffer[self.buffer_pointer..self.eof_pointer])
-//     }
-//
-//     fn is_eof(&self) -> bool {
-//         self.buffer_pointer != self.eof_pointer
-//     }
-//
-//     fn parse_headers(&mut self) -> Result<(), IoError> {
-//
-//         Ok(())
-//     }
-//
-//     pub fn iter(&mut self) -> RowIter {
-//         RowIter { reader: self }
-//     }
-// }
+use std::fs::File;
+use std::io::{Seek};
+use std::ops;
+use std::os::unix::fs::FileExt;
+use crate::io::error::IoError;
+
+pub struct FileReader {
+    file: File,
+    file_offset: u64,
+    buf_start: usize,
+    buf_end: usize,
+}
+
+impl FileReader {
+    pub fn open(path: &str) -> Result<Self, IoError> {
+        let file = File::open(&path).map_err(IoError::from)?;
+        Ok(FileReader {
+            file,
+            file_offset: 0,
+            buf_start: 0,
+            buf_end: 0,
+        })
+    }
+
+    fn load_buffer(&mut self, buffer: &mut [u8]) -> Result<(), IoError> {
+        buffer.copy_within(self.buf_start..self.buf_end, 0);
+        self.buf_end = self.buf_end - self.buf_start;
+        self.buf_start = 0;
+
+        let available_buffer = &mut buffer[self.buf_end..];
+
+        if available_buffer.is_empty() {
+            return Err(IoError::LineTooLong);
+        }
+
+        let bytes_read = self.file.read_at(available_buffer, self.file_offset)?;
+        self.file_offset += bytes_read as u64;
+        self.buf_end += bytes_read;
+
+        if bytes_read == 0 {
+            return Err(IoError::EndOfFile);
+        }
+        Ok(())
+    }
+
+    pub fn next_line(&mut self, buffer: &mut [u8]) -> Result<ops::Range<usize>, IoError> {
+        for i in self.buf_start..self.buf_end {
+            if buffer[i] == b'\n' {
+                let result = self.buf_start..i;
+                self.buf_start = i + 1; // skip the newline
+                return Ok(result);
+            }
+        }
+        self.load_buffer(buffer)?;
+        Ok(self.next_line(buffer)?)
+    }
+
+    pub fn rewind(&mut self) -> Result<(), IoError> {
+        self.file.seek(std::io::SeekFrom::Start(0)).map_err(IoError::from)?;
+        self.buf_start = 0;
+        self.buf_end = 0;
+        self.file_offset = 0;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn setup(content: &[u8], ) -> FileReader {
+        let mut file = NamedTempFile::new().expect("Failed to create temp file");
+        file.write(content).expect("Failed to write to temp file");
+        let path = file.path().to_str().unwrap();
+        let reader = FileReader::open(path).unwrap();
+        reader
+    }
+
+    #[test]
+    fn test_read_lines_basic() {
+        let content = b"line1\nline2\nline3\n";
+        let mut reader = setup(content);
+        let mut buffer = vec![0u8; 6];
+
+        for result in [b"line1", b"line2", b"line3"] {
+            let range = reader.next_line(&mut buffer).unwrap();
+            assert_eq!(&buffer[range], result);
+        }
+        assert!(matches!(reader.next_line(&mut buffer), Err(IoError::EndOfFile)));
+    }
+
+    #[test]
+    fn test_read_lines_no_trailing_newline() {
+        let content = b"foo\nbar\nbaz";
+        let mut reader = setup(content);
+        let mut buffer = vec![0u8; 4];
+
+        for result in [b"foo", b"bar", b"baz"] {
+            let range = reader.next_line(&mut buffer).unwrap();
+            assert_eq!(&buffer[range], result);
+        }
+        assert!(matches!(reader.next_line(&mut buffer), Err(IoError::EndOfFile)));
+    }
+
+    #[test]
+    fn test_empty_file() {
+        let content = b"";
+        let mut reader = setup(content);
+        let mut buffer = vec![0u8; 20];
+        assert!(matches!(reader.next_line(&mut buffer), Err(IoError::EndOfFile)));
+    }
+}
