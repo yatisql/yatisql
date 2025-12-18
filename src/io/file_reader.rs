@@ -3,12 +3,38 @@ use std::io::{Seek};
 use std::ops;
 use std::os::unix::fs::FileExt;
 use crate::io::error::IoError;
+use crate::io::traits::LineReader;
 
 pub struct FileReader {
     file: File,
     file_offset: u64,
     buf_start: usize,
     buf_end: usize,
+}
+
+impl LineReader for FileReader {
+    fn next_line(&mut self, buffer: &mut [u8]) -> Result<ops::Range<usize>, IoError> {
+        for i in self.buf_start..self.buf_end {
+            if buffer[i] == b'\n' {
+                let result = self.buf_start..i;
+                self.buf_start = i + 1; // skip the newline
+                return Ok(result);
+            }
+        }
+        match self.load_buffer(buffer) {
+            Err(IoError::EndOfFile) => {
+                if self.buf_start < self.buf_end {
+                    let result = self.buf_start..self.buf_end;
+                    self.buf_start = self.buf_end;
+                    Ok(result)
+                } else {
+                    Err(IoError::EndOfFile)
+                }
+            }
+            Err(e) => Err(e),
+            Ok(()) => Ok(self.next_line(buffer)?)
+        }
+    }
 }
 
 impl FileReader {
@@ -43,29 +69,7 @@ impl FileReader {
         Ok(())
     }
 
-    pub fn next_line(&mut self, buffer: &mut [u8]) -> Result<ops::Range<usize>, IoError> {
-        for i in self.buf_start..self.buf_end {
-            if buffer[i] == b'\n' {
-                let result = self.buf_start..i;
-                self.buf_start = i + 1; // skip the newline
-                return Ok(result);
-            }
-        }
-        match self.load_buffer(buffer) {
-            Err(IoError::EndOfFile) => {
-                if self.buf_start < self.buf_end {
-                    let result = self.buf_start..self.buf_end;
-                    self.buf_start = self.buf_end;
-                    Ok(result)
-                } else {
-                    Err(IoError::EndOfFile)
-                }
-            }
-            Err(e) => Err(e),
-            Ok(()) => Ok(self.next_line(buffer)?)
-        }
-    }
-
+    #[allow(dead_code)]
     pub fn rewind(&mut self) -> Result<(), IoError> {
         self.file.seek(std::io::SeekFrom::Start(0)).map_err(IoError::from)?;
         self.buf_start = 0;
@@ -81,7 +85,7 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
-    fn setup(content: &[u8], ) -> FileReader {
+    fn setup(content: &[u8]) -> FileReader {
         let mut file = NamedTempFile::new().expect("Failed to create temp file");
         file.write(content).expect("Failed to write to temp file");
         let path = file.path().to_str().unwrap();

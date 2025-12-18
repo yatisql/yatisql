@@ -1,12 +1,12 @@
 use std::{fmt, io};
-use std::str::Utf8Error;
 
 #[derive(Debug)]
 pub enum IoError {
     Io(io::Error),
     EndOfFile,
     LineTooLong,
-    Utf8Error { source: Utf8Error },
+    ColumnNotFound(String),
+    Other(String),
 }
 
 impl fmt::Display for IoError {
@@ -15,8 +15,8 @@ impl fmt::Display for IoError {
             IoError::Io(e) => write!(f, "I/O error: {}", e),
             IoError::EndOfFile {  } => write!(f, "End of file reached",),
             IoError::LineTooLong {  } => write!(f, "Row is too long"),
-            IoError::Utf8Error { source } =>
-                write!(f, "Utf8 read error: {}", source),
+            IoError::ColumnNotFound(msg) => write!(f, "Column not found: {}", msg),
+            IoError::Other(msg) => write!(f, "{}", msg),
         }
     }
 }

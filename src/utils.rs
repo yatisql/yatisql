@@ -1,3 +1,30 @@
+pub fn next_delimiter_pos(buffer: &[u8], start: usize, delimiter: u8) -> usize {
+    for i in start..buffer.len() {
+        if buffer[i] == delimiter {
+            return i;
+        }
+    }
+    buffer.len()
+}
+
+pub fn derive_delimiter(path: &str ) -> u8 {
+    // Simple heuristic based on file extension
+    // TODO: more sophisticated methods may be needed
+    if path.ends_with(".tsv") || path.ends_with(".tab") {
+        b'\t'
+    } else if path.ends_with(".csv") {
+        b','
+    } else if path.ends_with(".psv") {
+        b'|'
+    } else if path.ends_with(".scsv") {
+        b';'
+    } else if path.ends_with(".ssv") {
+        b' '
+    } else {
+        b'\t'
+    }
+}
+
 pub fn col_name_to_index(column_name: &[u8]) -> Option<usize> {
     let mut index: Option<usize> = None;
     for &ch in column_name.iter() {

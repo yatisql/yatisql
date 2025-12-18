@@ -1,4 +1,6 @@
 pub mod error;
-mod file_reader;
-mod tabular_file_reader;
-mod buffer;
+pub mod file_reader;
+pub mod selector;
+pub mod traits;
+pub mod file_writer;
+pub mod filter;
